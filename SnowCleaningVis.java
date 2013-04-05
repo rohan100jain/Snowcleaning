@@ -229,7 +229,6 @@ class Drawer extends JFrame {
             synchronized (world.workersLock) {
                 for (Cell worker : world.workers) {
                   if (world.noWork[worker.r][worker.c]) {
-                    System.err.println("Idle worker at " + worker.r + " " + worker.c);
                     g.fillRect(15 + worker.c * cellSize + 1, 15 + worker.r * cellSize + 1, cellSize - 2, cellSize - 2);
                   }
                 }
@@ -250,12 +249,13 @@ class Drawer extends JFrame {
             synchronized (world.workersLock) {
                 g2.drawString("Workers = " + world.workers.size(), horPos, 145);
             }
-            g2.drawString("Total snow fine = ", horPos, 180);
-            g2.drawString("" + world.totFine, horPos + 100, 180);
-            g2.drawString("Total salary = ", horPos, 200);
-            g2.drawString("" + world.totSalary, horPos + 100, 200);
-            g2.drawString("Current score = ", horPos, 220);
-            g2.drawString("" + (world.totFine + world.totSalary), horPos + 100, 220);
+            g2.drawString("Idle workers = " + world.idleCnt, horPos, 165);
+            g2.drawString("Total snow fine = ", horPos, 200);
+            g2.drawString("" + world.totFine, horPos + 100, 200);
+            g2.drawString("Total salary = ", horPos, 220);
+            g2.drawString("" + world.totSalary, horPos + 100, 220);
+            g2.drawString("Current score = ", horPos, 240);
+            g2.drawString("" + (world.totFine + world.totSalary), horPos + 100, 240);
         }
     }
 
@@ -314,6 +314,8 @@ class World {
     final Object workersLock = new Object();
 
     int snowCnt;
+    int idleCnt;
+    int boardSize;
     boolean[][] haveSnow;
     boolean[][] noWork;
 
@@ -327,8 +329,8 @@ class World {
     public World(int boardSize, int salary, int fine) {
         this.salary = salary;
         this.fine = fine;
+        this.boardSize = boardSize;
         haveSnow = new boolean[boardSize][boardSize];
-        noWork = new boolean[boardSize][boardSize];
     }
 
     public void updateTotalSalary() {
@@ -352,8 +354,6 @@ class World {
         if (haveSnow[r][c]) {
             snowCnt--;
             haveSnow[r][c] = false;
-        } else {
-            noWork[r][c] = true;
         }
     }
 
@@ -384,7 +384,6 @@ class World {
                 return "You are trying to execute a command for some worker more than once during the same turn.";
             } else {
                 Cell worker = workers.get(id);
-                noWork[worker.r][worker.c] = false;
                 worker.r += Constants.DR[dir];
                 worker.c += Constants.DC[dir];
                 if (worker.r < 0 || worker.c < 0 || worker.r >= haveSnow.length || worker.c >= haveSnow.length) {
@@ -397,8 +396,14 @@ class World {
     }
 
     public void cleanAllSnow() {
+        noWork = new boolean[boardSize][boardSize];
+        idleCnt = 0;
         synchronized (workersLock) {
             for (Cell worker : workers) {
+                if (!haveSnow[worker.r][worker.c]) {
+                  noWork[worker.r][worker.c] = true;
+                  idleCnt++;
+                }
                 removeSnow(worker.r, worker.c);
             }
         }

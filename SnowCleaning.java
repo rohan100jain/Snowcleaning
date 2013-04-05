@@ -1,5 +1,12 @@
 import java.io.*;
 import java.util.ArrayList;
+import java.util.LinkedList;
+
+class Fixed {
+  public static final String DIR_STR = "DLUR";
+  public static final int[] DR = new int[]{1, 0, -1, 0};
+  public static final int[] DC = new int[]{0, -1, 0, 1};
+}
 
 class SnowCleaning {
 
@@ -10,6 +17,8 @@ class SnowCleaning {
   private int numWorkers_;
   private int[][] snowState_;
   private int[][] workerState_;
+
+  private int day_;
 
   class HireData {
     public int row;
@@ -40,6 +49,17 @@ class SnowCleaning {
     }
   }
 
+  class Point {
+    public int row;
+    public int col;
+    public LinkedList<String> dir;
+    Point(int _row, int _col) {
+      row = _row;
+      col = _col;
+      dir = new LinkedList<String>();
+    }
+  }
+
   SnowCleaning() {
   }
 
@@ -47,48 +67,55 @@ class SnowCleaning {
     return (snowState_[row][col] == 1);
   }
 
-  private MoveData nearestNotRequiredHelper(int start_row, int start_col,
-      int end_row, int end_col, String dir, ArrayList<Integer> moved_workers) {
-    int worker = workerState_[start_row][start_col];
-    if (moved_workers.contains(worker)) {
-      return null;
-    }
-    if (worker != -1) {
-      if (!isLocationSnowed(start_row, start_col)) {
-        return new MoveData(worker, start_row, start_col, end_row, end_col, dir);
-      }
-    }
-    return null;
+  private boolean isIdleWorker(int row, int col) {
+    return ((workerState_[row][col] != -1) &&
+        !isLocationSnowed(row, col));
   }
 
-  private MoveData nearestNotRequiredWorker(int row, int col,
+  private MoveData nearestIdleWorker(int row, int col,
       ArrayList<Integer> moved_workers) {
-    if (col != 0) {
-      MoveData move_data = nearestNotRequiredHelper(row, col - 1, row, col,
-          "R", moved_workers);
-      if (move_data != null) {
-        return move_data;
+    LinkedList<Point> queue = new LinkedList<Point>();
+    queue.addLast(new Point(row, col));
+    boolean[][] visited = new boolean[boardSize_][boardSize_];
+    while (!queue.isEmpty()) {
+      Point p = queue.removeFirst();
+      if (visited[p.row][p.col]) continue;
+      int total_move = Math.abs(p.row - row) + Math.abs(p.col - col);
+      if (total_move > 12) continue;
+      visited[p.row][p.col] = true;
+      if (isIdleWorker(p.row, p.col)) {
+        int worker = workerState_[p.row][p.col];
+        if (!moved_workers.contains(worker)) {
+          int dir = Fixed.DIR_STR.indexOf(p.dir.getLast());
+          int end_row = p.row + Fixed.DR[dir];
+          int end_col = p.col + Fixed.DC[dir];
+          return new MoveData(worker, p.row, p.col, end_row, end_col,
+              p.dir.getLast());
+        }
       }
-    }
-    if (col != (boardSize_ - 1)) {
-      MoveData move_data = nearestNotRequiredHelper(row, col + 1, row, col,
-          "L", moved_workers);
-      if (move_data != null) {
-        return move_data;
+      if (p.col != 0) {
+        Point new_p = new Point(p.row, p.col - 1);
+        new_p.dir.addAll(p.dir);
+        new_p.dir.addLast("R");
+        queue.addLast(new_p);
       }
-    }
-    if (row != 0) {
-      MoveData move_data = nearestNotRequiredHelper(row - 1, col, row, col,
-          "D", moved_workers);
-      if (move_data != null) {
-        return move_data;
+      if (p.col != (boardSize_ - 1)) {
+        Point new_p = new Point(p.row, p.col + 1);
+        new_p.dir.addAll(p.dir);
+        new_p.dir.addLast("L");
+        queue.addLast(new_p);
       }
-    }
-    if (row != (boardSize_ - 1)) {
-      MoveData move_data = nearestNotRequiredHelper(row + 1, col, row, col,
-          "U", moved_workers);
-      if (move_data != null) {
-        return move_data;
+      if (p.row != 0) {
+        Point new_p = new Point(p.row - 1, p.col);
+        new_p.dir.addAll(p.dir);
+        new_p.dir.addLast("D");
+        queue.addLast(new_p);
+      }
+      if (p.row != (boardSize_ - 1)) {
+        Point new_p = new Point(p.row + 1, p.col);
+        new_p.dir.addAll(p.dir);
+        new_p.dir.addLast("U");
+        queue.addLast(new_p);
       }
     }
     return null;
@@ -98,7 +125,7 @@ class SnowCleaning {
     int numIdle = 0;
     for (int i = 0; i < boardSize_; ++i) {
       for (int j = 0; j < boardSize_; ++j) {
-        if (!isLocationSnowed(i, j) && (workerState_[i][j] != -1)) {
+        if (isIdleWorker(i, j)) {
           numIdle++;
         }
       }
@@ -111,6 +138,7 @@ class SnowCleaning {
     salary_ = salary;
     snowFine_ = snowFine;
     numWorkers_ = 0;
+    day_ = 0;
     snowState_ = new int[boardSize_][boardSize_];
     workerState_ = new int[boardSize_][boardSize_];
     for (int i = 0; i < boardSize_; ++i) {
@@ -123,6 +151,8 @@ class SnowCleaning {
   }
 
   public String[] nextDay(int[] snowFalls) {
+    day_++;
+    int slice = day_ / 200;
     ArrayList<String> commands = new ArrayList<String>();
     if (snowFine_ < salary_) {
       return commands.toArray(new String[commands.size()]);
@@ -141,14 +171,13 @@ class SnowCleaning {
         if (snowState_[row][col] == 0) continue;
         boolean hasWorker = (workerState_[row][col] != -1);
         if (!hasWorker) {
-          MoveData move_data = nearestNotRequiredWorker(row, col,
-              moved_workers);
+          MoveData move_data = nearestIdleWorker(row, col, moved_workers);
           if (move_data != null) {
             commands.add("M " + move_data.id + " " + move_data.dir);
             moved_workers.add(move_data.id);
             moving_commands.add(move_data);
           } else {
-            if (numWorkers_ < 100) {
+            if (numWorkers_ < 100 && (numWorkers_ < 10 * (1 + slice))) {
               commands.add("H " + row + " " + col);
               hiring_commands.add(new HireData(row, col, numWorkers_));
               numWorkers_++;
@@ -175,8 +204,6 @@ class SnowCleaning {
           move_data.start_row + " " + move_data.start_col + " to " +
           move_data.end_row + " " + move_data.end_col);
     }
-    int numIdle = numIdleWorkers();
-    System.err.println("Number of idle workers: " + numIdle);
     return commands.toArray(new String[commands.size()]);
   }
 
