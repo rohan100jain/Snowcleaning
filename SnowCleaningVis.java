@@ -225,6 +225,16 @@ class Drawer extends JFrame {
                 }
             }
 
+            g.setColor(Color.GREEN);
+            synchronized (world.workersLock) {
+                for (Cell worker : world.workers) {
+                  if (world.noWork[worker.r][worker.c]) {
+                    System.err.println("Idle worker at " + worker.r + " " + worker.c);
+                    g.fillRect(15 + worker.c * cellSize + 1, 15 + worker.r * cellSize + 1, cellSize - 2, cellSize - 2);
+                  }
+                }
+            }
+
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial", Font.BOLD, 12));
             Graphics2D g2 = (Graphics2D)g;
@@ -305,6 +315,7 @@ class World {
 
     int snowCnt;
     boolean[][] haveSnow;
+    boolean[][] noWork;
 
     List<Cell> workers = new ArrayList<Cell>();
     Set<Integer> usedWorkers = new HashSet<Integer>();
@@ -317,6 +328,7 @@ class World {
         this.salary = salary;
         this.fine = fine;
         haveSnow = new boolean[boardSize][boardSize];
+        noWork = new boolean[boardSize][boardSize];
     }
 
     public void updateTotalSalary() {
@@ -340,6 +352,8 @@ class World {
         if (haveSnow[r][c]) {
             snowCnt--;
             haveSnow[r][c] = false;
+        } else {
+            noWork[r][c] = true;
         }
     }
 
@@ -357,7 +371,6 @@ class World {
             } else {
                 workers.add(new Cell(r, c));
                 usedWorkers.add(workers.size() - 1);
-                removeSnow(r, c);
                 return "";
             }
         }
@@ -371,12 +384,12 @@ class World {
                 return "You are trying to execute a command for some worker more than once during the same turn.";
             } else {
                 Cell worker = workers.get(id);
+                noWork[worker.r][worker.c] = false;
                 worker.r += Constants.DR[dir];
                 worker.c += Constants.DC[dir];
                 if (worker.r < 0 || worker.c < 0 || worker.r >= haveSnow.length || worker.c >= haveSnow.length) {
                     return "You are trying to move a worker outside the board.";
                 }
-                removeSnow(worker.r, worker.c);
                 usedWorkers.add(id);
                 return "";
             }

@@ -94,6 +94,18 @@ class SnowCleaning {
     return null;
   }
 
+  private int numIdleWorkers() {
+    int numIdle = 0;
+    for (int i = 0; i < boardSize_; ++i) {
+      for (int j = 0; j < boardSize_; ++j) {
+        if (!isLocationSnowed(i, j) && (workerState_[i][j] != -1)) {
+          numIdle++;
+        }
+      }
+    }
+    return numIdle;
+  }
+
   public int init(int boardSize, int salary, int snowFine) {
     boardSize_ = boardSize;
     salary_ = salary;
@@ -163,6 +175,8 @@ class SnowCleaning {
           move_data.start_row + " " + move_data.start_col + " to " +
           move_data.end_row + " " + move_data.end_col);
     }
+    int numIdle = numIdleWorkers();
+    System.err.println("Number of idle workers: " + numIdle);
     return commands.toArray(new String[commands.size()]);
   }
 
