@@ -19,6 +19,16 @@ class SnowCleaning {
   private int[][] workerState_;
 
   private int day_;
+  private int slice;
+
+  private long duration_;
+
+  private ArrayList<String> commands;
+  private ArrayList<Integer> moved_workers;
+  private ArrayList<MoveData> moving_commands;
+  private ArrayList<HireData> hiring_commands;
+
+  private LinkedList<Point> snowCells_;
 
   class HireData {
     public int row;
@@ -81,7 +91,7 @@ class SnowCleaning {
       Point p = queue.removeFirst();
       if (visited[p.row][p.col]) continue;
       int total_move = Math.abs(p.row - row) + Math.abs(p.col - col);
-      if (total_move > 12) continue;
+      if (total_move > 2) continue;
       visited[p.row][p.col] = true;
       if (isIdleWorker(p.row, p.col)) {
         int worker = workerState_[p.row][p.col];
@@ -121,16 +131,8 @@ class SnowCleaning {
     return null;
   }
 
-  private int numIdleWorkers() {
-    int numIdle = 0;
-    for (int i = 0; i < boardSize_; ++i) {
-      for (int j = 0; j < boardSize_; ++j) {
-        if (isIdleWorker(i, j)) {
-          numIdle++;
-        }
-      }
-    }
-    return numIdle;
+  public long duration() {
+    return duration_;
   }
 
   public int init(int boardSize, int salary, int snowFine) {
@@ -139,6 +141,7 @@ class SnowCleaning {
     snowFine_ = snowFine;
     numWorkers_ = 0;
     day_ = 0;
+    snowCells_ = new LinkedList<Point>();
     snowState_ = new int[boardSize_][boardSize_];
     workerState_ = new int[boardSize_][boardSize_];
     for (int i = 0; i < boardSize_; ++i) {
@@ -150,59 +153,64 @@ class SnowCleaning {
     return 0;
   }
 
+  public void processSnowCell(int row, int col) {
+    if (snowState_[row][col] == 0) return;
+    boolean hasWorker = (workerState_[row][col] != -1);
+    if (!hasWorker) {
+      MoveData move_data = nearestIdleWorker(row, col, moved_workers);
+      if (move_data != null) {
+        commands.add("M " + move_data.id + " " + move_data.dir);
+        moved_workers.add(move_data.id);
+        moving_commands.add(move_data);
+      } else {
+        if (numWorkers_ < 100 && (numWorkers_ < 10 * (1 + slice))) {
+          commands.add("H " + row + " " + col);
+          hiring_commands.add(new HireData(row, col, numWorkers_));
+          numWorkers_++;
+        }
+      }
+    }
+  }
+
   public String[] nextDay(int[] snowFalls) {
     day_++;
-    int slice = day_ / 200;
-    ArrayList<String> commands = new ArrayList<String>();
+    slice = day_ / 200;
+    commands = new ArrayList<String>();
     if (snowFine_ < salary_) {
       return commands.toArray(new String[commands.size()]);
     }
-    ArrayList<HireData> hiring_commands = new ArrayList<HireData>();
-    ArrayList<MoveData> moving_commands = new ArrayList<MoveData>();
-    ArrayList<Integer> moved_workers = new ArrayList<Integer>();
+    hiring_commands = new ArrayList<HireData>();
+    moving_commands = new ArrayList<MoveData>();
+    moved_workers = new ArrayList<Integer>();
     int K = snowFalls.length / 2;
     for (int i = 0; i < K; ++i) {
       int row = snowFalls[2 * i];
       int col = snowFalls[2 * i + 1];
       snowState_[row][col] = 1;
+      snowCells_.addLast(new Point(row, col));
     }
-    for (int row = 0; row < boardSize_; ++row) {
-      for (int col = 0; col < boardSize_; ++col) {
-        if (snowState_[row][col] == 0) continue;
-        boolean hasWorker = (workerState_[row][col] != -1);
-        if (!hasWorker) {
-          MoveData move_data = nearestIdleWorker(row, col, moved_workers);
-          if (move_data != null) {
-            commands.add("M " + move_data.id + " " + move_data.dir);
-            moved_workers.add(move_data.id);
-            moving_commands.add(move_data);
-          } else {
-            if (numWorkers_ < 100 && (numWorkers_ < 10 * (1 + slice))) {
-              commands.add("H " + row + " " + col);
-              hiring_commands.add(new HireData(row, col, numWorkers_));
-              numWorkers_++;
-            }
-          }
-        }
-      }
+    for (Point p : snowCells_) {
+      processSnowCell(p.row, p.col);
     }
     for (HireData hire_data : hiring_commands) {
       workerState_[hire_data.row][hire_data.col] = hire_data.id;
       if (snowState_[hire_data.row][hire_data.col] == 1) {
         snowState_[hire_data.row][hire_data.col] = 0;
+        snowCells_.remove(new Point(hire_data.row, hire_data.col));
       }
-      System.err.println("Added worker " + hire_data.id +
-          " to " + hire_data.row + " " + hire_data.col);
+      /*System.err.println("Added worker " + hire_data.id +
+          " to " + hire_data.row + " " + hire_data.col);*/
     }
     for (MoveData move_data : moving_commands) {
       workerState_[move_data.start_row][move_data.start_col] = -1;
       workerState_[move_data.end_row][move_data.end_col] = move_data.id;
       if (snowState_[move_data.end_row][move_data.end_col] == 1) {
         snowState_[move_data.end_row][move_data.end_col] = 0;
+        snowCells_.remove(new Point(move_data.end_row, move_data.end_col));
       }
-      System.err.println("Moved worker " + move_data.id + " from " +
+     /* System.err.println("Moved worker " + move_data.id + " from " +
           move_data.start_row + " " + move_data.start_col + " to " +
-          move_data.end_row + " " + move_data.end_col);
+          move_data.end_row + " " + move_data.end_col);*/
     }
     return commands.toArray(new String[commands.size()]);
   }
@@ -217,7 +225,11 @@ class SnowCleaning {
 
       SnowCleaning cleaner = new SnowCleaning();
 
+      long duration = 0;
+      long startTime = System.nanoTime();
       cleaner.init(boardSize, salary, snowFine);
+      long endTime = System.nanoTime();
+      duration += (endTime - startTime);
 
       for (int t = 0; t < 2000; ++t) {
         int snowCnt = Integer.parseInt(in.readLine());
@@ -226,7 +238,10 @@ class SnowCleaning {
           snowFalls[i] = Integer.parseInt(in.readLine());
         }
 
+        startTime = System.nanoTime();
         String[] ret = cleaner.nextDay(snowFalls);
+        endTime = System.nanoTime();
+        duration += (endTime - startTime);
 
         System.out.println(ret.length);
         for (int i = 0; i < ret.length; ++i) {
@@ -234,6 +249,7 @@ class SnowCleaning {
         }
       }
       System.out.flush();
+      System.err.println("Duration: " + duration / 1e9);
     } catch (Exception e) {}
   }
 }
