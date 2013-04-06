@@ -225,15 +225,6 @@ class Drawer extends JFrame {
                 }
             }
 
-            g.setColor(Color.GREEN);
-            synchronized (world.workersLock) {
-                for (Cell worker : world.workers) {
-                  if (world.noWork[worker.r][worker.c]) {
-                    g.fillRect(15 + worker.c * cellSize + 1, 15 + worker.r * cellSize + 1, cellSize - 2, cellSize - 2);
-                  }
-                }
-            }
-
             g.setColor(Color.BLACK);
             g.setFont(new Font("Arial", Font.BOLD, 12));
             Graphics2D g2 = (Graphics2D)g;
@@ -249,13 +240,12 @@ class Drawer extends JFrame {
             synchronized (world.workersLock) {
                 g2.drawString("Workers = " + world.workers.size(), horPos, 145);
             }
-            g2.drawString("Idle workers = " + world.idleCnt, horPos, 165);
-            g2.drawString("Total snow fine = ", horPos, 200);
-            g2.drawString("" + world.totFine, horPos + 100, 200);
-            g2.drawString("Total salary = ", horPos, 220);
-            g2.drawString("" + world.totSalary, horPos + 100, 220);
-            g2.drawString("Current score = ", horPos, 240);
-            g2.drawString("" + (world.totFine + world.totSalary), horPos + 100, 240);
+            g2.drawString("Total snow fine = ", horPos, 180);
+            g2.drawString("" + world.totFine, horPos + 100, 180);
+            g2.drawString("Total salary = ", horPos, 200);
+            g2.drawString("" + world.totSalary, horPos + 100, 200);
+            g2.drawString("Current score = ", horPos, 220);
+            g2.drawString("" + (world.totFine + world.totSalary), horPos + 100, 220);
         }
     }
 
@@ -314,10 +304,7 @@ class World {
     final Object workersLock = new Object();
 
     int snowCnt;
-    int idleCnt;
-    int boardSize;
     boolean[][] haveSnow;
-    boolean[][] noWork;
 
     List<Cell> workers = new ArrayList<Cell>();
     Set<Integer> usedWorkers = new HashSet<Integer>();
@@ -329,7 +316,6 @@ class World {
     public World(int boardSize, int salary, int fine) {
         this.salary = salary;
         this.fine = fine;
-        this.boardSize = boardSize;
         haveSnow = new boolean[boardSize][boardSize];
     }
 
@@ -371,6 +357,7 @@ class World {
             } else {
                 workers.add(new Cell(r, c));
                 usedWorkers.add(workers.size() - 1);
+                removeSnow(r, c);
                 return "";
             }
         }
@@ -389,6 +376,7 @@ class World {
                 if (worker.r < 0 || worker.c < 0 || worker.r >= haveSnow.length || worker.c >= haveSnow.length) {
                     return "You are trying to move a worker outside the board.";
                 }
+                removeSnow(worker.r, worker.c);
                 usedWorkers.add(id);
                 return "";
             }
@@ -396,14 +384,8 @@ class World {
     }
 
     public void cleanAllSnow() {
-        noWork = new boolean[boardSize][boardSize];
-        idleCnt = 0;
         synchronized (workersLock) {
             for (Cell worker : workers) {
-                if (!haveSnow[worker.r][worker.c]) {
-                  noWork[worker.r][worker.c] = true;
-                  idleCnt++;
-                }
                 removeSnow(worker.r, worker.c);
             }
         }

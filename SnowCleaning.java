@@ -6,6 +6,9 @@ class Fixed {
   public static final String DIR_STR = "DLUR";
   public static final int[] DR = new int[]{1, 0, -1, 0};
   public static final int[] DC = new int[]{0, -1, 0, 1};
+  public static final int BOUNDS = 4;
+  public static final int DAYS_SLICE = 20;
+  public static final int WORKER_SLICE = 1;
 }
 
 class SnowCleaning {
@@ -21,10 +24,8 @@ class SnowCleaning {
   private int day_;
   private int slice;
 
-  private long duration_;
-
   private ArrayList<String> commands;
-  private ArrayList<Integer> moved_workers;
+  private int[] moved_workers;
   private ArrayList<MoveData> moving_commands;
   private ArrayList<HireData> hiring_commands;
 
@@ -62,11 +63,9 @@ class SnowCleaning {
   class Point {
     public int row;
     public int col;
-    public LinkedList<String> dir;
     Point(int _row, int _col) {
       row = _row;
       col = _col;
-      dir = new LinkedList<String>();
     }
   }
 
@@ -82,57 +81,57 @@ class SnowCleaning {
         !isLocationSnowed(row, col));
   }
 
-  private MoveData nearestIdleWorker(int row, int col,
-      ArrayList<Integer> moved_workers) {
-    LinkedList<Point> queue = new LinkedList<Point>();
-    queue.addLast(new Point(row, col));
-    boolean[][] visited = new boolean[boardSize_][boardSize_];
-    while (!queue.isEmpty()) {
-      Point p = queue.removeFirst();
-      if (visited[p.row][p.col]) continue;
-      int total_move = Math.abs(p.row - row) + Math.abs(p.col - col);
-      if (total_move > 2) continue;
-      visited[p.row][p.col] = true;
-      if (isIdleWorker(p.row, p.col)) {
-        int worker = workerState_[p.row][p.col];
-        if (!moved_workers.contains(worker)) {
-          int dir = Fixed.DIR_STR.indexOf(p.dir.getLast());
-          int end_row = p.row + Fixed.DR[dir];
-          int end_col = p.col + Fixed.DC[dir];
-          return new MoveData(worker, p.row, p.col, end_row, end_col,
-              p.dir.getLast());
-        }
-      }
-      if (p.col != 0) {
-        Point new_p = new Point(p.row, p.col - 1);
-        new_p.dir.addAll(p.dir);
-        new_p.dir.addLast("R");
-        queue.addLast(new_p);
-      }
-      if (p.col != (boardSize_ - 1)) {
-        Point new_p = new Point(p.row, p.col + 1);
-        new_p.dir.addAll(p.dir);
-        new_p.dir.addLast("L");
-        queue.addLast(new_p);
-      }
-      if (p.row != 0) {
-        Point new_p = new Point(p.row - 1, p.col);
-        new_p.dir.addAll(p.dir);
-        new_p.dir.addLast("D");
-        queue.addLast(new_p);
-      }
-      if (p.row != (boardSize_ - 1)) {
-        Point new_p = new Point(p.row + 1, p.col);
-        new_p.dir.addAll(p.dir);
-        new_p.dir.addLast("U");
-        queue.addLast(new_p);
-      }
+  private String getDirection(int dx, int dy) {
+    if (dx > 0) {
+      return "D";
     }
-    return null;
+    if (dx < 0) {
+      return "U";
+    }
+    if (dy > 0) {
+      return "R";
+    }
+    if (dy < 0) {
+      return "L";
+    }
+    return "";
   }
 
-  public long duration() {
-    return duration_;
+  private boolean isValidCell(int row, int col) {
+    return (row >= 0 && row < boardSize_ && col >=0 && col < boardSize_);
+  }
+
+  private MoveData nearestIdleWorker(int row, int col) {
+    int min_distance = 1000;
+    int start_row = row;
+    int start_col = col;
+    for (int i = -Fixed.BOUNDS; i <= Fixed.BOUNDS; ++i) {
+      for (int j = -Fixed.BOUNDS; j <= Fixed.BOUNDS; ++j) {
+        if (!isValidCell(row + i, col + j)) continue;
+        int worker = workerState_[row + i][col + j];
+        if (isIdleWorker(row + i, col + j)) {
+          if (moved_workers[worker] == 1) continue;
+          int distance = Math.abs(i) + Math.abs(j);
+          if (distance < min_distance) {
+            min_distance = distance;
+            start_row = row + i;
+            start_col = col + j;
+          }
+        }
+      }
+    }
+    if (min_distance < 1000) {
+      int dx = row - start_row;
+      int dy = col - start_col;
+      String direction = getDirection(dx, dy);
+      int dir = Fixed.DIR_STR.indexOf(direction);
+      int end_row = start_row + Fixed.DR[dir];
+      int end_col = start_col + Fixed.DC[dir];
+      return new MoveData(workerState_[start_row][start_col], start_row,
+          start_col, start_row + Fixed.DR[dir], start_col + Fixed.DC[dir],
+          direction);
+    }
+    return null;
   }
 
   public int init(int boardSize, int salary, int snowFine) {
@@ -157,13 +156,13 @@ class SnowCleaning {
     if (snowState_[row][col] == 0) return;
     boolean hasWorker = (workerState_[row][col] != -1);
     if (!hasWorker) {
-      MoveData move_data = nearestIdleWorker(row, col, moved_workers);
+      MoveData move_data = nearestIdleWorker(row, col);
       if (move_data != null) {
         commands.add("M " + move_data.id + " " + move_data.dir);
-        moved_workers.add(move_data.id);
+        moved_workers[move_data.id] = 1;
         moving_commands.add(move_data);
       } else {
-        if (numWorkers_ < 100 && (numWorkers_ < 10 * (1 + slice))) {
+        if (numWorkers_ < 100 && (numWorkers_ < Fixed.WORKER_SLICE * (1 + slice))) {
           commands.add("H " + row + " " + col);
           hiring_commands.add(new HireData(row, col, numWorkers_));
           numWorkers_++;
@@ -174,14 +173,14 @@ class SnowCleaning {
 
   public String[] nextDay(int[] snowFalls) {
     day_++;
-    slice = day_ / 200;
+    slice = day_ / Fixed.DAYS_SLICE;
     commands = new ArrayList<String>();
     if (snowFine_ < salary_) {
       return commands.toArray(new String[commands.size()]);
     }
     hiring_commands = new ArrayList<HireData>();
     moving_commands = new ArrayList<MoveData>();
-    moved_workers = new ArrayList<Integer>();
+    moved_workers = new int[100];
     int K = snowFalls.length / 2;
     for (int i = 0; i < K; ++i) {
       int row = snowFalls[2 * i];
@@ -194,23 +193,14 @@ class SnowCleaning {
     }
     for (HireData hire_data : hiring_commands) {
       workerState_[hire_data.row][hire_data.col] = hire_data.id;
-      if (snowState_[hire_data.row][hire_data.col] == 1) {
-        snowState_[hire_data.row][hire_data.col] = 0;
-        snowCells_.remove(new Point(hire_data.row, hire_data.col));
-      }
-      /*System.err.println("Added worker " + hire_data.id +
-          " to " + hire_data.row + " " + hire_data.col);*/
+      snowState_[hire_data.row][hire_data.col] = 0;
+      snowCells_.remove(new Point(hire_data.row, hire_data.col));
     }
     for (MoveData move_data : moving_commands) {
       workerState_[move_data.start_row][move_data.start_col] = -1;
       workerState_[move_data.end_row][move_data.end_col] = move_data.id;
-      if (snowState_[move_data.end_row][move_data.end_col] == 1) {
-        snowState_[move_data.end_row][move_data.end_col] = 0;
-        snowCells_.remove(new Point(move_data.end_row, move_data.end_col));
-      }
-     /* System.err.println("Moved worker " + move_data.id + " from " +
-          move_data.start_row + " " + move_data.start_col + " to " +
-          move_data.end_row + " " + move_data.end_col);*/
+      snowState_[move_data.end_row][move_data.end_col] = 0;
+      snowCells_.remove(new Point(move_data.end_row, move_data.end_col));
     }
     return commands.toArray(new String[commands.size()]);
   }
